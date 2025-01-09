@@ -35,10 +35,11 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: tokenData.error_description || "Token exchange failed" }, { status: 500 });
     }
 
-    console.log("Access Token:", tokenData.access_token);
+  
 
     // Redirect to the playlists page with the access token
     const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
+    console.log("Access Token:", tokenData.access_token, baseUrl);
     return NextResponse.redirect(`${baseUrl}/playlists?accessToken=${tokenData.access_token}`);
   } catch (error) {
     console.error("Error handling Spotify callback:", error);
