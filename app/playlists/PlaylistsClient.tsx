@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import Image from "next/image";
+import SongSuggestions from "./SongSuggestions";
+import Votes from "./Votes";
 
 // Initialize Supabase client
 const supabase = createClient(
@@ -113,11 +115,13 @@ export default function PlaylistsClient() {
 
         setVotes((prev) => prev.filter((vote) => vote.spotifytrackid !== trackId));
       } else {
-        const { error } = await supabase.from("votes").insert([{
-          spotifytrackid: trackId,
-          spotifyuserid: user.id,
-          votedat: new Date().toISOString(),
-        }]);
+        const { error } = await supabase.from("votes").insert([
+          {
+            spotifytrackid: trackId,
+            spotifyuserid: user.id,
+            votedat: new Date().toISOString(),
+          },
+        ]);
         if (error) throw error;
 
         setVotes((prev) => [...prev, { spotifytrackid: trackId, spotifyuserid: user.id }]);
@@ -125,20 +129,6 @@ export default function PlaylistsClient() {
     } catch (err) {
       console.error("Error managing vote:", err);
     }
-  };
-
-  const generatePlaceholder = (username: string) => {
-    const colors = ["bg-red-500", "bg-blue-500", "bg-green-500", "bg-yellow-500", "bg-purple-500"];
-    const randomColor = colors[Math.floor(username.charCodeAt(0) % colors.length)];
-    const firstLetter = username[0].toUpperCase();
-
-    return (
-      <div
-        className={`flex items-center justify-center w-8 h-8 rounded-full ${randomColor} text-white text-xs font-bold`}
-      >
-        {firstLetter}
-      </div>
-    );
   };
 
   if (isLoading) {
@@ -154,7 +144,7 @@ export default function PlaylistsClient() {
   }
 
   return (
-    <div className="min-h-screen w-screen bg-gray-900 text-white">
+    <div className="min-h-screen bg-gray-900 text-white">
       <div className="container mx-auto py-8">
         {/* Desktop View */}
         <div className="hidden md:grid grid-cols-2 gap-4">
@@ -171,119 +161,121 @@ export default function PlaylistsClient() {
                 />
               )}
               <ul className="mt-4">
-                {playlist.tracks.items.map((item) => (
-                  <li
-                    key={item.track.id}
-                    className={`flex items-center gap-4 mb-2 ${
-                      index === 1 ? "cursor-pointer" : "cursor-default"
-                    }`}
-                    onClick={() => index === 1 && handleVote(item.track.id)}
-                  >
-                    {item.track.album.images[0]?.url ? (
-                      <Image
-                        src={item.track.album.images[0]?.url || ""}
-                        alt={`${item.track.name} cover`}
-                        width={48}
-                        height={48}
-                        className="rounded-md"
-                      />
-                    ) : (
-                      <div className="w-12 h-12 bg-gray-700 rounded-md flex items-center justify-center text-sm text-white">
-                        N/A
-                      </div>
-                    )}
-                    <div className="flex-1">
-                      <p
-                        className={`font-medium ${
-                          votes.some((vote) => vote.spotifytrackid === item.track.id) && index === 1
-                            ? "text-green-500"
-                            : ""
-                        }`}
-                      >
-                        {item.track.name}
-                      </p>
-                      <p className="text-sm text-gray-400">
-                        {item.track.artists.map((artist) => artist.name).join(", ")}
-                      </p>
-                    </div>
-                    <div className="ml-auto flex items-center gap-2">
-                      {votes
-                        .filter((vote) => vote.spotifytrackid === item.track.id)
-                        .map((vote, idx) =>
-                          vote.spotifyuserid === user?.id && user.profilePicture ? (
-                            <Image
-                              key={`${vote.spotifyuserid}-${idx}`}
-                              src={user.profilePicture}
-                              alt="User PFP"
-                              width={24}
-                              height={24}
-                              className="rounded-full"
-                            />
-                          ) : (
-                            generatePlaceholder(vote.spotifyuserid)
-                          )
-                        )}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
-
-        {/* Mobile View */}
-        <div className="md:hidden">
-          {playlists.map((playlist, index) => (
-            <div
-              key={playlist.id}
-              className={`${activeTab === index ? "block" : "hidden"} px-4 py-6`}
-            >
-              <h2 className="text-lg font-bold mb-4">{playlist.name}</h2>
               {playlist.tracks.items.map((item) => (
-                <div key={item.track.id} className="mb-4">
-                  {item.track.album.images[0]?.url ? (
-                    <Image
-                      src={item.track.album.images[0]?.url || ""}
-                      alt={`${item.track.name} cover`}
-                      width={48}
-                      height={48}
-                      className="rounded-md"
-                    />
-                  ) : (
-                    <div className="w-12 h-12 bg-gray-700 rounded-md flex items-center justify-center text-sm text-white">
-                      N/A
-                    </div>
-                  )}
-                  <p
-                    className={`font-medium ${
-                      votes.some((vote) => vote.spotifytrackid === item.track.id) && index === 1
-                        ? "text-green-500"
-                        : ""
-                    }`}
-                  >
-                    {item.track.name}
-                  </p>
-                  <p className="text-gray-400 text-sm">
-                    {item.track.artists.map((artist) => artist.name).join(", ")}
-                  </p>
+  <div
+    key={item.track.id}
+    className="mb-4 cursor-pointer"
+    onClick={() => index === 1 && handleVote(item.track.id)}
+  >
+    {item.track.album.images[0]?.url ? (
+      <Image
+        src={item.track.album.images[0]?.url || ""}
+        alt={`${item.track.name} cover`}
+        width={48}
+        height={48}
+        className="rounded-md"
+      />
+    ) : (
+      <div className="w-12 h-12 bg-gray-700 rounded-md flex items-center justify-center text-sm text-white">
+        N/A
+      </div>
+    )}
+    <p
+      className={`font-medium ${
+        votes.some((vote) => vote.spotifytrackid === item.track.id) && index === 1
+          ? "text-green-500"
+          : ""
+      }`}
+    >
+      {item.track.name}
+    </p>
+    <p className="text-gray-400 text-sm">
+      {item.track.artists.map((artist) => artist.name).join(", ")}
+    </p>
+    {/* Add Votes Component */}
+    <Votes votes={votes} trackId={item.track.id} />
+  </div>
+))}
+
+              </ul>
+              {index === 1 && token && user?.id && (
+                <div className="mt-6">
+                  <SongSuggestions token={token} userId={user.id} playlistId={playlist.id} />
                 </div>
-              ))}
+              )}
             </div>
           ))}
-          <div className="fixed bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-700 flex justify-around py-2">
-            {playlists.map((playlist, index) => (
-              <button
-                key={playlist.id}
-                onClick={() => setActiveTab(index)}
-                className={`flex-1 text-center py-2 text-sm ${
-                  activeTab === index ? "text-white" : "text-gray-400"
-                }`}
-              >
-                {playlist.name}
-              </button>
-            ))}
-          </div>
         </div>
+        <div className="md:hidden">
+  {playlists.map((playlist, index) => (
+    <div
+      key={playlist.id}
+      className={`${activeTab === index ? "block" : "hidden"} px-4 py-6`}
+    >
+      <h2 className="text-lg font-bold mb-4">{playlist.name}</h2>
+      {playlist.tracks.items.map((item) => (
+        <div
+          key={item.track.id}
+          className="mb-4 flex items-start gap-4"
+          onClick={() => index === 1 && handleVote(item.track.id)}
+        >
+          {/* Track Image */}
+          {item.track.album.images[0]?.url ? (
+            <Image
+              src={item.track.album.images[0]?.url || ""}
+              alt={`${item.track.name} cover`}
+              width={48}
+              height={48}
+              className="rounded-md"
+            />
+          ) : (
+            <div className="w-12 h-12 bg-gray-700 rounded-md flex items-center justify-center text-sm text-white">
+              N/A
+            </div>
+          )}
+
+          {/* Track Details */}
+          <div className="flex-1">
+            <p
+              className={`font-medium ${
+                votes.some((vote) => vote.spotifytrackid === item.track.id) && index === 1
+                  ? "text-green-500"
+                  : ""
+              }`}
+            >
+              {item.track.name}
+            </p>
+            <p className="text-gray-400 text-sm">
+              {item.track.artists.map((artist) => artist.name).join(", ")}
+            </p>
+          </div>
+
+          {/* Votes */}
+          <Votes votes={votes} trackId={item.track.id} />
+        </div>
+      ))}
+      {index === 1 && token && user?.id && (
+        <div className="mt-6">
+          <SongSuggestions token={token} userId={user.id} playlistId={playlist.id} />
+        </div>
+      )}
+    </div>
+  ))}
+  <div className="fixed bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-700 flex justify-around py-2">
+    {playlists.map((playlist, index) => (
+      <button
+        key={playlist.id}
+        onClick={() => setActiveTab(index)}
+        className={`flex-1 text-center py-2 text-sm ${
+          activeTab === index ? "text-white" : "text-gray-400"
+        }`}
+      >
+        {playlist.name}
+      </button>
+    ))}
+  </div>
+</div>
+
       </div>
     </div>
   );
