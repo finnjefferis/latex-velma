@@ -2,7 +2,14 @@
 
 import { useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import { createClient } from "@supabase/supabase-js";
 import Image from "next/image";
+
+// Initialize Supabase client
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 type Playlist = {
   id: string;
@@ -27,97 +34,73 @@ type SpotifyUser = {
 };
 
 type Vote = {
-  spotifyTrackId: string;
-  spotifyUserId: string;
-  profilePicture: string | null;
+  spotifytrackid: string;
+  spotifyuserid: string;
 };
 
 export default function PlaylistsClient() {
-  // ------------------
-  // State
-  // ------------------
   const [user, setUser] = useState<SpotifyUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
 
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
-  const [votes, setVotes] = useState<Vote[]>([]); // Track votes for songs
-
+  const [votes, setVotes] = useState<Vote[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // ------------------
-  // Next.js Hooks
-  // ------------------
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  // ------------------
-  // Fetch Token, User, and Playlists
-  // ------------------
   useEffect(() => {
     const param = searchParams.get("accessToken");
 
     if (!param) {
-      // If no accessToken in query, redirect.
       router.push("/api/auth");
       return;
     }
 
-    // Store the token in state
     setToken(param);
 
-    // Define a function that fetches user + playlists
     const fetchData = async () => {
       try {
-        // 1) Fetch Spotify user
         const userRes = await fetch("https://api.spotify.com/v1/me", {
           headers: { Authorization: `Bearer ${param}` },
         });
-        if (!userRes.ok) {
-          throw new Error(`Failed to fetch Spotify user. Status: ${userRes.status}`);
-        }
+        if (!userRes.ok) throw new Error(`Failed to fetch Spotify user. Status: ${userRes.status}`);
         const userData = await userRes.json();
-        const spotifyUser: SpotifyUser = {
-          id: userData.id,
-          profilePicture: userData.images?.[0]?.url ?? null,
-        };
-        setUser(spotifyUser);
+        setUser({ id: userData.id, profilePicture: userData.images?.[0]?.url ?? null });
 
-        // 2) Fetch two specific playlists
-        const playlistIds = ["4wOKl0V3Hy5QnNUmYxM6Tk", "2QgT7vxgcZNLpiIPhuJDo0"]; 
+        const playlistIds = ["4wOKl0V3Hy5QnNUmYxM6Tk", "2QgT7vxgcZNLpiIPhuJDo0"];
         const fetchedPlaylists = await Promise.all(
           playlistIds.map(async (id) => {
             const res = await fetch(`https://api.spotify.com/v1/playlists/${id}`, {
               headers: { Authorization: `Bearer ${param}` },
             });
-            if (!res.ok) {
-              const errorText = await res.text();
-              console.error(`Failed to fetch playlist ${id}: ${errorText}`);
-              throw new Error(`Failed to fetch playlist ${id}`);
-            }
+            if (!res.ok) throw new Error(`Failed to fetch playlist ${id}`);
             return res.json();
           })
         );
         setPlaylists(fetchedPlaylists);
+
+        const { data, error } = await supabase.from("votes").select("*");
+        if (error) throw error;
+        setVotes(data || []);
       } catch (err) {
-        console.error("Error during fetch:", err);
-        setError("Failed to fetch user or playlists. Please try again later.");
-        // If something fails, optionally redirect or just show error
-        // router.push("/api/auth");
+        console.error("Error fetching data:", err);
+        setError("Failed to fetch data. Please try again later.");
       } finally {
         setIsLoading(false);
       }
     };
 
-    // Actually fetch everything
     fetchData();
   }, [searchParams, router]);
 
-  // ------------------
-  // Voting Logic
-  // ------------------
-  const handleVote = (trackId: string) => {
-    // Ensure we're operating on the second playlist (Suggestions)
+  const handleVote = async (trackId: string) => {
+    if (!user) {
+      console.error("No user available for voting.");
+      return;
+    }
+
     const suggestionsPlaylist = playlists[1];
     if (!suggestionsPlaylist) {
       alert("Suggestions playlist not found!");
@@ -132,34 +115,37 @@ export default function PlaylistsClient() {
       return;
     }
 
-    // Check if user already voted for this track
-    const existingVote = votes.find((vote) => vote.spotifyTrackId === trackId);
+    const existingVote = votes.find((vote) => vote.spotifytrackid === trackId);
 
-    if (!user) {
-      // If we somehow have no user, can't vote
-      console.error("No user available for voting.");
-      return;
-    }
+    try {
+      if (existingVote) {
+        const { error } = await supabase
+          .from("votes")
+          .delete()
+          .match({ spotifyuserid: user.id, spotifytrackid: trackId });
+        if (error) throw error;
 
-    if (existingVote) {
-      // Remove vote
-      setVotes((prev) => prev.filter((vote) => vote.spotifyTrackId !== trackId));
-    } else {
-      // Add vote
-      setVotes((prev) => [
-        ...prev,
-        {
-          spotifyTrackId: trackId,
-          spotifyUserId: user.id,
-          profilePicture: user.profilePicture,
-        },
-      ]);
+        setVotes((prev) => prev.filter((vote) => vote.spotifytrackid !== trackId));
+      } else {
+        const { error } = await supabase.from("votes").insert([
+          {
+            spotifytrackid: trackId,
+            spotifyuserid: user.id,
+            votedat: new Date().toISOString(),
+          },
+        ]);
+        if (error) throw error;
+
+        setVotes((prev) => [
+          ...prev,
+          { spotifytrackid: trackId, spotifyuserid: user.id },
+        ]);
+      }
+    } catch (err) {
+      console.error("Error managing vote:", err);
     }
   };
 
-  // ------------------
-  // Helper to generate placeholder
-  // ------------------
   const generatePlaceholder = (username: string) => {
     const colors = ["bg-red-500", "bg-blue-500", "bg-green-500", "bg-yellow-500", "bg-purple-500"];
     const randomColor = colors[Math.floor(username.charCodeAt(0) % colors.length)];
@@ -174,28 +160,6 @@ export default function PlaylistsClient() {
     );
   };
 
-  // ------------------
-  // Helper to get or generate profile picture
-  // ------------------
-  const getProfilePicture = (profilePicture: string | null, username: string) => {
-    return profilePicture ? (
-      <Image
-        src={profilePicture}
-        alt="Profile Picture"
-        width={32}
-        height={32}
-        className="rounded-full"
-      />
-    ) : (
-      generatePlaceholder(username)
-    );
-  };
-
-  // ------------------
-  // Render
-  // ------------------
-
-  // 1) Loading Screen
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white">
@@ -204,7 +168,6 @@ export default function PlaylistsClient() {
     );
   }
 
-  // 2) Error State
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white">
@@ -213,29 +176,27 @@ export default function PlaylistsClient() {
     );
   }
 
-  // 3) If we have no user or token after loading, treat as an error
-  if (!user || !token) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white">
-        <p className="text-red-500">Something went wrong. No user or token found.</p>
-      </div>
-    );
-  }
-
-  // 4) Render Playlists
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white">
-      {/* User Info */}
       <div className="mb-8 flex flex-col items-center">
-        {getProfilePicture(user.profilePicture, user.id)}
-        <h1 className="text-2xl font-bold mt-4">Welcome, {user.id}</h1>
+        {user?.profilePicture ? (
+          <Image
+            src={user.profilePicture}
+            alt="Profile Picture"
+            width={96}
+            height={96}
+            className="rounded-full"
+          />
+        ) : (
+          generatePlaceholder(user?.id || "Unknown")
+        )}
+        <h1 className="text-2xl font-bold mt-4">Welcome, {user?.id}</h1>
       </div>
 
-      {/* Playlist Cards */}
       {playlists.map((playlist, index) => (
         <div key={playlist.id} className="mb-8 w-full max-w-3xl">
           <div className="flex flex-col items-center gap-4 mb-6">
-            {playlist.images[0]?.url && (
+            {playlist.images[0]?.url ? (
               <Image
                 src={playlist.images[0].url}
                 alt={`${playlist.name} cover`}
@@ -243,27 +204,24 @@ export default function PlaylistsClient() {
                 height={192}
                 className="rounded-md shadow-md"
               />
-            )}
+            ) : null}
             <h2 className="text-xl font-semibold">{playlist.name}</h2>
-            <p className="text-sm text-gray-400">
-              {playlist.description || "No description available."}
-            </p>
-            <p className="text-sm text-gray-400">Total Tracks: {playlist.tracks.total}</p>
+            <p className="text-sm text-gray-400">{playlist.description || "No description available."}</p>
           </div>
 
           <ul className="text-left w-full">
             {playlist.tracks.items.map((item) => {
-              const hasVoted = votes.some((vote) => vote.spotifyTrackId === item.track.id);
+              const trackVotes = votes.filter((vote) => vote.spotifytrackid === item.track.id);
 
               return (
                 <li
                   key={item.track.id}
                   className={`flex items-center gap-4 p-2 border-b border-gray-700 last:border-b-0 ${
                     index === 1 ? "cursor-pointer" : ""
-                  } ${hasVoted ? "bg-green-700" : "hover:bg-gray-700"}`}
+                  } ${trackVotes.length > 0 ? "bg-green-700" : "hover:bg-gray-700"}`}
                   onClick={() => (index === 1 ? handleVote(item.track.id) : null)}
                 >
-                  {item.track.album.images[0]?.url && (
+                  {item.track.album.images[0]?.url ? (
                     <Image
                       src={item.track.album.images[0].url}
                       alt={`${item.track.name} cover`}
@@ -271,18 +229,33 @@ export default function PlaylistsClient() {
                       height={48}
                       className="rounded"
                     />
-                  )}
+                  ) : null}
                   <div>
                     <p className="font-medium">{item.track.name}</p>
                     <p className="text-sm text-gray-400">
                       {item.track.artists.map((artist) => artist.name).join(", ")}
                     </p>
                   </div>
-                  {hasVoted && (
-                    <div className="ml-auto flex items-center gap-2">
-                      {getProfilePicture(user.profilePicture, user.id)}
-                    </div>
-                  )}
+                  <div className="ml-auto flex items-center gap-2">
+                    {trackVotes.map((vote) =>
+                      vote.spotifyuserid === user?.id ? (
+                        user.profilePicture ? (
+                          <Image
+                            key={vote.spotifyuserid}
+                            src={user.profilePicture}
+                            alt="User PFP"
+                            width={24}
+                            height={24}
+                            className="rounded-full"
+                          />
+                        ) : (
+                          generatePlaceholder(vote.spotifyuserid)
+                        )
+                      ) : (
+                        generatePlaceholder(vote.spotifyuserid)
+                      )
+                    )}
+                  </div>
                 </li>
               );
             })}
