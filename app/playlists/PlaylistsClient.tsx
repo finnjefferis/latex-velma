@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import Image from "next/image";
+import SongSuggestions from "./SongSuggestions"; 
 
 // Initialize Supabase client
 const supabase = createClient(
@@ -273,6 +274,10 @@ export default function PlaylistsClient() {
           </ul>
         </div>
       ))}
+           <div className="mt-12 w-full max-w-3xl">
+        <h2 className="text-xl font-semibold text-center mb-4">Suggest a Song</h2>
+        <SongSuggestions token={token!} playlistId="2QgT7vxgcZNLpiIPhuJDo0" />
+      </div>
     </div>
   );
 }
