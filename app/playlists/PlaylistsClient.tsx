@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import Image from "next/image";
 
 type Playlist = {
@@ -31,26 +32,63 @@ type Vote = {
   profilePicture: string | null;
 };
 
-export default function PlaylistsClient({ user, token }: { user: SpotifyUser; token: string }) {
+export default function PlaylistsClient() {
+  // ------------------
+  // State
+  // ------------------
+  const [user, setUser] = useState<SpotifyUser | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [votes, setVotes] = useState<Vote[]>([]); // Track votes for songs
 
-  useEffect(() => {
-    async function fetchPlaylists() {
-      if (!token) {
-        setError("No access token available for fetching playlists.");
-        setIsLoading(false);
-        return;
-      }
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
+  // ------------------
+  // Next.js Hooks
+  // ------------------
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  // ------------------
+  // Fetch Token, User, and Playlists
+  // ------------------
+  useEffect(() => {
+    const param = searchParams.get("accessToken");
+
+    if (!param) {
+      // If no accessToken in query, redirect.
+      router.push("/api/auth");
+      return;
+    }
+
+    // Store the token in state
+    setToken(param);
+
+    // Define a function that fetches user + playlists
+    const fetchData = async () => {
       try {
-        const playlistIds = ["4wOKl0V3Hy5QnNUmYxM6Tk", "2QgT7vxgcZNLpiIPhuJDo0"]; // First is "Latex Velma", second is "Suggestions"
-        const playlists = await Promise.all(
+        // 1) Fetch Spotify user
+        const userRes = await fetch("https://api.spotify.com/v1/me", {
+          headers: { Authorization: `Bearer ${param}` },
+        });
+        if (!userRes.ok) {
+          throw new Error(`Failed to fetch Spotify user. Status: ${userRes.status}`);
+        }
+        const userData = await userRes.json();
+        const spotifyUser: SpotifyUser = {
+          id: userData.id,
+          profilePicture: userData.images?.[0]?.url ?? null,
+        };
+        setUser(spotifyUser);
+
+        // 2) Fetch two specific playlists
+        const playlistIds = ["4wOKl0V3Hy5QnNUmYxM6Tk", "2QgT7vxgcZNLpiIPhuJDo0"]; 
+        const fetchedPlaylists = await Promise.all(
           playlistIds.map(async (id) => {
             const res = await fetch(`https://api.spotify.com/v1/playlists/${id}`, {
-              headers: { Authorization: `Bearer ${token}` },
+              headers: { Authorization: `Bearer ${param}` },
             });
             if (!res.ok) {
               const errorText = await res.text();
@@ -60,43 +98,68 @@ export default function PlaylistsClient({ user, token }: { user: SpotifyUser; to
             return res.json();
           })
         );
-        setPlaylists(playlists);
-        setError(null); // Clear any previous errors
+        setPlaylists(fetchedPlaylists);
       } catch (err) {
-        console.error("Error fetching playlists:", err);
-        setError("Failed to fetch playlists. Please try again later.");
+        console.error("Error during fetch:", err);
+        setError("Failed to fetch user or playlists. Please try again later.");
+        // If something fails, optionally redirect or just show error
+        // router.push("/api/auth");
       } finally {
         setIsLoading(false);
       }
+    };
+
+    // Actually fetch everything
+    fetchData();
+  }, [searchParams, router]);
+
+  // ------------------
+  // Voting Logic
+  // ------------------
+  const handleVote = (trackId: string) => {
+    // Ensure we're operating on the second playlist (Suggestions)
+    const suggestionsPlaylist = playlists[1];
+    if (!suggestionsPlaylist) {
+      alert("Suggestions playlist not found!");
+      return;
     }
 
-    fetchPlaylists();
-  }, [token]);
-
-  // Handle vote toggling
-  const handleVote = async (trackId: string) => {
-    const isInSuggestions = playlists[1]?.tracks.items.some((item) => item.track.id === trackId);
-
+    const isInSuggestions = suggestionsPlaylist.tracks.items.some(
+      (item) => item.track.id === trackId
+    );
     if (!isInSuggestions) {
       alert("You can only vote for songs in the Suggestions playlist!");
       return;
     }
 
-    // Check if already voted
+    // Check if user already voted for this track
     const existingVote = votes.find((vote) => vote.spotifyTrackId === trackId);
+
+    if (!user) {
+      // If we somehow have no user, can't vote
+      console.error("No user available for voting.");
+      return;
+    }
 
     if (existingVote) {
       // Remove vote
-      setVotes((prevVotes) => prevVotes.filter((vote) => vote.spotifyTrackId !== trackId));
+      setVotes((prev) => prev.filter((vote) => vote.spotifyTrackId !== trackId));
     } else {
       // Add vote
-      setVotes((prevVotes) => [
-        ...prevVotes,
-        { spotifyTrackId: trackId, spotifyUserId: user.id, profilePicture: user.profilePicture },
+      setVotes((prev) => [
+        ...prev,
+        {
+          spotifyTrackId: trackId,
+          spotifyUserId: user.id,
+          profilePicture: user.profilePicture,
+        },
       ]);
     }
   };
 
+  // ------------------
+  // Helper to generate placeholder
+  // ------------------
   const generatePlaceholder = (username: string) => {
     const colors = ["bg-red-500", "bg-blue-500", "bg-green-500", "bg-yellow-500", "bg-purple-500"];
     const randomColor = colors[Math.floor(username.charCodeAt(0) % colors.length)];
@@ -111,6 +174,9 @@ export default function PlaylistsClient({ user, token }: { user: SpotifyUser; to
     );
   };
 
+  // ------------------
+  // Helper to get or generate profile picture
+  // ------------------
   const getProfilePicture = (profilePicture: string | null, username: string) => {
     return profilePicture ? (
       <Image
@@ -125,6 +191,11 @@ export default function PlaylistsClient({ user, token }: { user: SpotifyUser; to
     );
   };
 
+  // ------------------
+  // Render
+  // ------------------
+
+  // 1) Loading Screen
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white">
@@ -133,6 +204,7 @@ export default function PlaylistsClient({ user, token }: { user: SpotifyUser; to
     );
   }
 
+  // 2) Error State
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white">
@@ -141,25 +213,41 @@ export default function PlaylistsClient({ user, token }: { user: SpotifyUser; to
     );
   }
 
+  // 3) If we have no user or token after loading, treat as an error
+  if (!user || !token) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white">
+        <p className="text-red-500">Something went wrong. No user or token found.</p>
+      </div>
+    );
+  }
+
+  // 4) Render Playlists
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white">
+      {/* User Info */}
       <div className="mb-8 flex flex-col items-center">
         {getProfilePicture(user.profilePicture, user.id)}
         <h1 className="text-2xl font-bold mt-4">Welcome, {user.id}</h1>
       </div>
 
+      {/* Playlist Cards */}
       {playlists.map((playlist, index) => (
         <div key={playlist.id} className="mb-8 w-full max-w-3xl">
           <div className="flex flex-col items-center gap-4 mb-6">
-            <Image
-              src={playlist.images[0]?.url}
-              alt={`${playlist.name} cover`}
-              width={192}
-              height={192}
-              className="rounded-md shadow-md"
-            />
+            {playlist.images[0]?.url && (
+              <Image
+                src={playlist.images[0].url}
+                alt={`${playlist.name} cover`}
+                width={192}
+                height={192}
+                className="rounded-md shadow-md"
+              />
+            )}
             <h2 className="text-xl font-semibold">{playlist.name}</h2>
-            <p className="text-sm text-gray-400">{playlist.description || "No description available."}</p>
+            <p className="text-sm text-gray-400">
+              {playlist.description || "No description available."}
+            </p>
             <p className="text-sm text-gray-400">Total Tracks: {playlist.tracks.total}</p>
           </div>
 
@@ -170,18 +258,20 @@ export default function PlaylistsClient({ user, token }: { user: SpotifyUser; to
               return (
                 <li
                   key={item.track.id}
-                  className={`flex items-center gap-4 p-2 border-b border-gray-700 last:border-b-0 cursor-pointer ${
-                    hasVoted ? "bg-green-700" : "hover:bg-gray-700"
-                  }`}
+                  className={`flex items-center gap-4 p-2 border-b border-gray-700 last:border-b-0 ${
+                    index === 1 ? "cursor-pointer" : ""
+                  } ${hasVoted ? "bg-green-700" : "hover:bg-gray-700"}`}
                   onClick={() => (index === 1 ? handleVote(item.track.id) : null)}
                 >
-                  <Image
-                    src={item.track.album.images[0]?.url || ""}
-                    alt={`${item.track.name} cover`}
-                    width={48}
-                    height={48}
-                    className="rounded"
-                  />
+                  {item.track.album.images[0]?.url && (
+                    <Image
+                      src={item.track.album.images[0].url}
+                      alt={`${item.track.name} cover`}
+                      width={48}
+                      height={48}
+                      className="rounded"
+                    />
+                  )}
                   <div>
                     <p className="font-medium">{item.track.name}</p>
                     <p className="text-sm text-gray-400">
