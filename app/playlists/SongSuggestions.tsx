@@ -18,10 +18,11 @@ type SearchResult = {
 
 type SongSuggestionsProps = {
   token: string;
-  playlistId: string; // ID of playlist 2 to add songs to
+  userId: string; // Spotify user ID for tracking votes
+  playlistId: string; // Spotify playlist ID to which songs will be added
 };
 
-export default function SongSuggestions({ token, playlistId }: SongSuggestionsProps) {
+export default function SongSuggestions({ token, userId, playlistId }: SongSuggestionsProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -34,9 +35,12 @@ export default function SongSuggestions({ token, playlistId }: SongSuggestionsPr
     setError(null);
 
     try {
-      const res = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(searchQuery)}&type=track`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch(
+        `https://api.spotify.com/v1/search?q=${encodeURIComponent(searchQuery)}&type=track`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
 
       if (!res.ok) throw new Error(`Failed to fetch search results: ${res.statusText}`);
 
@@ -50,20 +54,49 @@ export default function SongSuggestions({ token, playlistId }: SongSuggestionsPr
     }
   };
 
-  const handleAddSong = async (track: SearchResult) => {
+  const handleAddVoteAndSong = async (track: SearchResult) => {
+    if (!userId) {
+      console.error("No user ID available for adding the vote.");
+      alert("You must be signed in to suggest a song.");
+      return;
+    }
+
     try {
-      const { error } = await supabase.from("votes").insert({
+      // 1. Add a vote in Supabase
+      const { error: voteError } = await supabase.from("votes").insert({
         spotifytrackid: track.id,
-        title: track.name,
-        artist: track.artists.map((artist) => artist.name).join(", "),
-        playlistid: playlistId,
+        spotifyuserid: userId,
+        votedat: new Date().toISOString(),
       });
 
-      if (error) throw error;
-      alert(`Added ${track.name} to the playlist!`);
+      if (voteError) {
+        throw new Error(`Failed to add vote: ${voteError.message}`);
+      }
+
+      // 2. Add the song to the Spotify playlist
+      const spotifyRes = await fetch(
+        `https://api.spotify.com/v1/playlists/${playlistId}/tracks`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            uris: [`spotify:track:${track.id}`],
+          }),
+        }
+      );
+
+      if (!spotifyRes.ok) {
+        const spotifyError = await spotifyRes.json();
+        throw new Error(`Failed to add song to Spotify playlist: ${spotifyError.error.message}`);
+      }
+
+      alert(`Successfully added "${track.name}" to the playlist and voted!`);
     } catch (err) {
-      console.error("Error adding song to playlist:", err);
-      alert("Failed to add song to the playlist. Please try again.");
+      console.error("Error adding vote or song to Spotify playlist:", err);
+      alert("Failed to add the song or vote. Please try again.");
     }
   };
 
@@ -113,9 +146,9 @@ export default function SongSuggestions({ token, playlistId }: SongSuggestionsPr
             </div>
             <button
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-              onClick={() => handleAddSong(result)}
+              onClick={() => handleAddVoteAndSong(result)}
             >
-              Add
+              Vote & Add
             </button>
           </li>
         ))}
