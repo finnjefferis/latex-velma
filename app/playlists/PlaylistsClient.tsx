@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import Image from "next/image";
-import SongSuggestions from "./SongSuggestions"; 
 
 // Initialize Supabase client
 const supabase = createClient(
@@ -42,11 +41,11 @@ type Vote = {
 export default function PlaylistsClient() {
   const [user, setUser] = useState<SpotifyUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
-
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [votes, setVotes] = useState<Vote[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<number>(0); // Active tab for mobile view
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -102,20 +101,6 @@ export default function PlaylistsClient() {
       return;
     }
 
-    const suggestionsPlaylist = playlists[1];
-    if (!suggestionsPlaylist) {
-      alert("Suggestions playlist not found!");
-      return;
-    }
-
-    const isInSuggestions = suggestionsPlaylist.tracks.items.some(
-      (item) => item.track.id === trackId
-    );
-    if (!isInSuggestions) {
-      alert("You can only vote for songs in the Suggestions playlist!");
-      return;
-    }
-
     const existingVote = votes.find((vote) => vote.spotifytrackid === trackId);
 
     try {
@@ -128,19 +113,14 @@ export default function PlaylistsClient() {
 
         setVotes((prev) => prev.filter((vote) => vote.spotifytrackid !== trackId));
       } else {
-        const { error } = await supabase.from("votes").insert([
-          {
-            spotifytrackid: trackId,
-            spotifyuserid: user.id,
-            votedat: new Date().toISOString(),
-          },
-        ]);
+        const { error } = await supabase.from("votes").insert([{
+          spotifytrackid: trackId,
+          spotifyuserid: user.id,
+          votedat: new Date().toISOString(),
+        }]);
         if (error) throw error;
 
-        setVotes((prev) => [
-          ...prev,
-          { spotifytrackid: trackId, spotifyuserid: user.id },
-        ]);
+        setVotes((prev) => [...prev, { spotifytrackid: trackId, spotifyuserid: user.id }]);
       }
     } catch (err) {
       console.error("Error managing vote:", err);
@@ -162,126 +142,149 @@ export default function PlaylistsClient() {
   };
 
   if (isLoading) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white">
-        <p>Loading playlists...</p>
-      </div>
-    );
+    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
   }
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white">
-        <p className="text-red-500">{error}</p>
+      <div className="min-h-screen flex items-center justify-center text-red-500">
+        {error}
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white">
-      <div className="mb-8 flex flex-col items-center">
-        {user?.profilePicture ? (
-          <Image
-            src={user.profilePicture}
-            alt="Profile Picture"
-            width={96}
-            height={96}
-            className="rounded-full"
-          />
-        ) : (
-          generatePlaceholder(user?.id || "Unknown")
-        )}
-        <h1 className="text-2xl font-bold mt-4">Welcome, {user?.id}</h1>
-      </div>
+    <div className="min-h-screen w-screen bg-gray-900 text-white">
+      <div className="container mx-auto py-8">
+        {/* Desktop View */}
+        <div className="hidden md:grid grid-cols-2 gap-4">
+          {playlists.map((playlist, index) => (
+            <div key={playlist.id}>
+              <h2 className="text-xl font-bold mb-4">{playlist.name}</h2>
+              {playlist.images[0]?.url && (
+                <Image
+                  src={playlist.images[0].url}
+                  alt={`${playlist.name} cover`}
+                  width={192}
+                  height={192}
+                  className="rounded-md shadow-md"
+                />
+              )}
+              <ul className="mt-4">
+                {playlist.tracks.items.map((item) => (
+                  <li
+                    key={item.track.id}
+                    className={`flex items-center gap-4 mb-2 ${
+                      index === 1 ? "cursor-pointer" : "cursor-default"
+                    }`}
+                    onClick={() => index === 1 && handleVote(item.track.id)}
+                  >
+                    {item.track.album.images[0]?.url ? (
+                      <Image
+                        src={item.track.album.images[0]?.url || ""}
+                        alt={`${item.track.name} cover`}
+                        width={48}
+                        height={48}
+                        className="rounded-md"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 bg-gray-700 rounded-md flex items-center justify-center text-sm text-white">
+                        N/A
+                      </div>
+                    )}
+                    <div className="flex-1">
+                      <p
+                        className={`font-medium ${
+                          votes.some((vote) => vote.spotifytrackid === item.track.id) && index === 1
+                            ? "text-green-500"
+                            : ""
+                        }`}
+                      >
+                        {item.track.name}
+                      </p>
+                      <p className="text-sm text-gray-400">
+                        {item.track.artists.map((artist) => artist.name).join(", ")}
+                      </p>
+                    </div>
+                    <div className="ml-auto flex items-center gap-2">
+                      {votes
+                        .filter((vote) => vote.spotifytrackid === item.track.id)
+                        .map((vote, idx) =>
+                          vote.spotifyuserid === user?.id && user.profilePicture ? (
+                            <Image
+                              key={`${vote.spotifyuserid}-${idx}`}
+                              src={user.profilePicture}
+                              alt="User PFP"
+                              width={24}
+                              height={24}
+                              className="rounded-full"
+                            />
+                          ) : (
+                            generatePlaceholder(vote.spotifyuserid)
+                          )
+                        )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
 
-      {playlists.map((playlist, index) => (
-        <div key={playlist.id} className="mb-8 w-full max-w-3xl">
-          <div className="flex flex-col items-center gap-4 mb-6">
-            {playlist.images[0]?.url ? (
-              <Image
-                src={playlist.images[0].url}
-                alt={`${playlist.name} cover`}
-                width={192}
-                height={192}
-                className="rounded-md shadow-md"
-              />
-            ) : null}
-            <h2 className="text-xl font-semibold">{playlist.name}</h2>
-            <p className="text-sm text-gray-400">{playlist.description || "No description available."}</p>
-          </div>
-
-          <ul className="text-left w-full">
-            {playlist.tracks.items.map((item) => {
-              const trackVotes = votes.filter((vote) => vote.spotifytrackid === item.track.id);
-
-              return (
-                <li
-                  key={item.track.id}
-                  className={`flex items-center gap-4 p-2 border-b border-gray-700 last:border-b-0 ${
-                    index === 1 ? "cursor-pointer" : ""
-                  } ${trackVotes.length > 0 ? "bg-green-700" : "hover:bg-gray-700"}`}
-                  onClick={() => (index === 1 ? handleVote(item.track.id) : null)}
-                >
+        {/* Mobile View */}
+        <div className="md:hidden">
+          {playlists.map((playlist, index) => (
+            <div
+              key={playlist.id}
+              className={`${activeTab === index ? "block" : "hidden"} px-4 py-6`}
+            >
+              <h2 className="text-lg font-bold mb-4">{playlist.name}</h2>
+              {playlist.tracks.items.map((item) => (
+                <div key={item.track.id} className="mb-4">
                   {item.track.album.images[0]?.url ? (
                     <Image
-                      src={item.track.album.images[0].url}
+                      src={item.track.album.images[0]?.url || ""}
                       alt={`${item.track.name} cover`}
                       width={48}
                       height={48}
-                      className="rounded"
+                      className="rounded-md"
                     />
-                  ) : null}
-                  <div>
-                    <p className="font-medium">{item.track.name}</p>
-                    <p className="text-sm text-gray-400">
-                      {item.track.artists.map((artist) => artist.name).join(", ")}
-                    </p>
-                  </div>
-                  <div className="ml-auto flex items-center gap-2">
-  {trackVotes.map((vote, index) =>
-    vote.spotifyuserid === user?.id ? (
-      user.profilePicture ? (
-        <Image
-          key={`${vote.spotifyuserid}-${index}`} // Use a unique combination as key
-          src={user.profilePicture}
-          alt="User PFP"
-          width={24}
-          height={24}
-          className="rounded-full"
-        />
-      ) : (
-        <div
-          key={`${vote.spotifyuserid}-${index}`} // Use the same unique combination for placeholders
-          className="flex items-center justify-center w-8 h-8 rounded-full bg-gray-700 text-white text-xs font-bold"
-        >
-          {vote.spotifyuserid[0]?.toUpperCase()}
+                  ) : (
+                    <div className="w-12 h-12 bg-gray-700 rounded-md flex items-center justify-center text-sm text-white">
+                      N/A
+                    </div>
+                  )}
+                  <p
+                    className={`font-medium ${
+                      votes.some((vote) => vote.spotifytrackid === item.track.id) && index === 1
+                        ? "text-green-500"
+                        : ""
+                    }`}
+                  >
+                    {item.track.name}
+                  </p>
+                  <p className="text-gray-400 text-sm">
+                    {item.track.artists.map((artist) => artist.name).join(", ")}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ))}
+          <div className="fixed bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-700 flex justify-around py-2">
+            {playlists.map((playlist, index) => (
+              <button
+                key={playlist.id}
+                onClick={() => setActiveTab(index)}
+                className={`flex-1 text-center py-2 text-sm ${
+                  activeTab === index ? "text-white" : "text-gray-400"
+                }`}
+              >
+                {playlist.name}
+              </button>
+            ))}
+          </div>
         </div>
-      )
-    ) : (
-      <div
-        key={`${vote.spotifyuserid}-${index}`} // Ensure unique keys for all elements
-        className="flex items-center justify-center w-8 h-8 rounded-full bg-gray-700 text-white text-xs font-bold"
-      >
-        {vote.spotifyuserid[0]?.toUpperCase()}
       </div>
-    )
-  )}
-</div>
-
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      ))}
-{token && user?.id && (
-  <div className="mt-12 w-full max-w-3xl">
-    <h2 className="text-xl font-semibold text-center mb-4">Suggest a Song</h2>
-    <SongSuggestions token={token!} userId={user?.id || ""} playlistId="2QgT7vxgcZNLpiIPhuJDo0" />
-
-  </div>
-)}
-
     </div>
   );
 }
