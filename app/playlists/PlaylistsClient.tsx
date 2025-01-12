@@ -237,25 +237,36 @@ export default function PlaylistsClient() {
                     </p>
                   </div>
                   <div className="ml-auto flex items-center gap-2">
-                    {trackVotes.map((vote) =>
-                      vote.spotifyuserid === user?.id ? (
-                        user.profilePicture ? (
-                          <Image
-                            key={vote.spotifyuserid}
-                            src={user.profilePicture}
-                            alt="User PFP"
-                            width={24}
-                            height={24}
-                            className="rounded-full"
-                          />
-                        ) : (
-                          generatePlaceholder(vote.spotifyuserid)
-                        )
-                      ) : (
-                        generatePlaceholder(vote.spotifyuserid)
-                      )
-                    )}
-                  </div>
+  {trackVotes.map((vote, index) =>
+    vote.spotifyuserid === user?.id ? (
+      user.profilePicture ? (
+        <Image
+          key={`${vote.spotifyuserid}-${index}`} // Use a unique combination as key
+          src={user.profilePicture}
+          alt="User PFP"
+          width={24}
+          height={24}
+          className="rounded-full"
+        />
+      ) : (
+        <div
+          key={`${vote.spotifyuserid}-${index}`} // Use the same unique combination for placeholders
+          className="flex items-center justify-center w-8 h-8 rounded-full bg-gray-700 text-white text-xs font-bold"
+        >
+          {vote.spotifyuserid[0]?.toUpperCase()}
+        </div>
+      )
+    ) : (
+      <div
+        key={`${vote.spotifyuserid}-${index}`} // Ensure unique keys for all elements
+        className="flex items-center justify-center w-8 h-8 rounded-full bg-gray-700 text-white text-xs font-bold"
+      >
+        {vote.spotifyuserid[0]?.toUpperCase()}
+      </div>
+    )
+  )}
+</div>
+
                 </li>
               );
             })}
