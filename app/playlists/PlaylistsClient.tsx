@@ -7,6 +7,10 @@ import Image from "next/image";
 import SongSuggestions from "./SongSuggestions";
 import Votes from "./Votes";
 
+const MAIN_PLAYLIST_ID = "4wOKl0V3Hy5QnNUmYxM6Tk";
+const SUGGESTIONS_PLAYLIST_ID = "2QgT7vxgcZNLpiIPhuJDo0";
+
+
 // Initialize Supabase client
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -136,6 +140,43 @@ export default function PlaylistsClient() {
           },
         ]);
       }
+
+      // Then, inside handleVote (AFTER you've updated the local "votes" state) add:
+const newVoteCount = votes.filter((v) => v.spotifytrackid === trackId).length;
+// If we just inserted a vote, add +1:
+const finalVoteCount = existingVote ? newVoteCount : newVoteCount + 1;
+
+if (finalVoteCount === 5) {
+  try {
+    // 1. Remove track from SUGGESTIONS_PLAYLIST_ID
+    await fetch(`https://api.spotify.com/v1/playlists/${SUGGESTIONS_PLAYLIST_ID}/tracks`, {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`, // or whatever your access token variable is
+      },
+      body: JSON.stringify({
+        tracks: [{ uri: `spotify:track:${trackId}` }],
+      }),
+    });
+
+    // 2. Add track to MAIN_PLAYLIST_ID
+    await fetch(`https://api.spotify.com/v1/playlists/${MAIN_PLAYLIST_ID}/tracks`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        uris: [`spotify:track:${trackId}`],
+      }),
+    });
+
+    console.log(`Track ${trackId} moved from suggestions to main playlist!`);
+  } catch (err) {
+    console.error("Error moving track:", err);
+  }
+}
     } catch (err) {
       console.error("Error managing vote:", err);
     }
