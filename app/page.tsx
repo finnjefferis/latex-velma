@@ -25,8 +25,10 @@ export default async function Home() {
   const spotifyAuthUrl = `https://accounts.spotify.com/authorize?response_type=code&client_id=${encodeURIComponent(
     process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID!
   )}&scope=${encodeURIComponent(
-    "playlist-read-private playlist-read-collaborative"
-  )}&redirect_uri=${encodeURIComponent(process.env.NEXT_PUBLIC_SPOTIFY_REDIRECT_URI!)}`;
+    "playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private"
+  )}&redirect_uri=${encodeURIComponent(
+    process.env.NEXT_PUBLIC_SPOTIFY_REDIRECT_URI!
+  )}`;
   
 
  
