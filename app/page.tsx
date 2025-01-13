@@ -7,28 +7,14 @@ import Link from "next/link";
 export default async function Home() {
   const supabase = createClient();
 
-  // Fetch data from Supabase tables
-  const [songsResult, votesResult, learnedSongsResult] = await Promise.all([
-    (await supabase).from("Songs").select(),
-    (await supabase).from("Votes").select(),
-    (await supabase).from("LearnedSongs").select(),
-  ]);
 
-  const songs = songsResult.data || [];
-  const votes = votesResult.data || [];
-  const learnedSongs = learnedSongsResult.data || [];
-
-  // Construct Spotify authorization URL
-  const spotifyClientId = process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID!;
-  const spotifyRedirectUri = process.env.NEXT_PUBLIC_SPOTIFY_REDIRECT_URI!;
-  const spotifyScopes = ["playlist-read-private", "playlist-read-collaborative"];
   const spotifyAuthUrl = `https://accounts.spotify.com/authorize?response_type=code&client_id=${encodeURIComponent(
     process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID!
   )}&scope=${encodeURIComponent(
-    "playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private"
-  )}&redirect_uri=${encodeURIComponent(
-    process.env.NEXT_PUBLIC_SPOTIFY_REDIRECT_URI!
-  )}`;
+    "user-read-private user-read-email playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private"
+  )}&redirect_uri=${encodeURIComponent(process.env.NEXT_PUBLIC_SPOTIFY_REDIRECT_URI!)}`;
+  
+  
   
 
  
