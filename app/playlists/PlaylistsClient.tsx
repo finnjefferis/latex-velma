@@ -53,10 +53,6 @@ export default function PlaylistsClient() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<number>(0); // Active tab for mobile view
 
-  // Modal state
-  const [isModalOpen, setModalOpen] = useState(false);
-  const [modalContent, setModalContent] = useState<React.ReactNode>(null);
-
   // State for swipe detection
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const [touchEndX, setTouchEndX] = useState<number | null>(null);
@@ -246,27 +242,6 @@ export default function PlaylistsClient() {
 
   return (
     <div className="min-h-screen w-screen bg-gray-900 text-white">
-      {/* Modal Container */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          {/* Backdrop */}
-          <div 
-            className="fixed inset-0 bg-black opacity-50" 
-            onClick={() => setModalOpen(false)}
-          ></div>
-          {/* Modal Content */}
-          <div className="relative z-60 bg-white rounded-md p-6 mx-4 max-w-md w-full">
-            {modalContent}
-            <button 
-              className="mt-4 px-4 py-2 bg-blue-600 text-white rounded"
-              onClick={() => setModalOpen(false)}
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
-
       <div className="container mx-auto py-8">
         {/* Desktop View */}
         <div className="hidden md:grid grid-cols-2 gap-4">
@@ -341,8 +316,8 @@ export default function PlaylistsClient() {
           ))}
         </div>
 
-        {/* Mobile View */}
-        <div
+   {/* Mobile View */}
+   <div
           className="md:hidden relative pb-16 overflow-hidden"
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
@@ -354,7 +329,10 @@ export default function PlaylistsClient() {
             style={{ transform: `translateX(-${activeTab * 100}%)` }}
           >
             {/* Tab 0 Content */}
-            <div className="w-full flex-shrink-0 px-4 py-6">
+            <div
+              className="w-full flex-shrink-0 px-4 py-6 overflow-y-auto"
+              style={{ maxHeight: 'calc(100vh - 4rem)' }}
+            >
               <h2 className="text-lg font-bold mb-4">{playlists[0]?.name}</h2>
               {playlists[0]?.tracks.items.map((item) => {
                 const bgWidth = getVotePercentage(item.track.id);
@@ -396,7 +374,10 @@ export default function PlaylistsClient() {
             </div>
 
             {/* Tab 1 Content */}
-            <div className="w-full flex-shrink-0 px-4 py-6">
+            <div
+              className="w-full flex-shrink-0 px-4 py-6 overflow-y-auto"
+              style={{ maxHeight: 'calc(100vh - 4rem)' }}
+            >
               <h2 className="text-lg font-bold mb-4">{playlists[1]?.name}</h2>
               {playlists[1]?.tracks.items.map((item) => {
                 const bgWidth = getVotePercentage(item.track.id);
@@ -438,7 +419,10 @@ export default function PlaylistsClient() {
             </div>
 
             {/* Tab 2 Content */}
-            <div className="w-full flex-shrink-0 px-4 py-6">
+            <div
+              className="w-full flex-shrink-0 px-4 py-6 overflow-y-auto"
+              style={{ maxHeight: 'calc(100vh - 4rem)' }}
+            >
               <h2 className="text-lg font-bold mb-4">Song Suggestions</h2>
               {token && user?.id && (
                 <SongSuggestions
