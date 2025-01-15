@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import { createClient } from "@supabase/supabase-js";
 
@@ -18,8 +18,8 @@ type SearchResult = {
 
 type SongSuggestionsProps = {
   token: string;
-  userId: string; // Spotify user ID for tracking votes
-  playlistId: string; // Spotify playlist ID to which songs will be added
+  userId: string;
+  playlistId: string;
 };
 
 export default function SongSuggestions({ token, userId, playlistId }: SongSuggestionsProps) {
@@ -28,52 +28,69 @@ export default function SongSuggestions({ token, userId, playlistId }: SongSugge
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSearch = async () => {
-    if (!searchQuery) return;
+  // Fetch default suggestions using Spotify's New Releases API
+  const fetchDefaultSuggestions = async () => {
+    try {
+      const res = await fetch(
+        `https://api.spotify.com/v1/search?q=livdog&type=track&limit=20`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!res.ok) throw new Error(`Error fetching tracks: ${res.statusText}`);
+      const data = await res.json();
+      // Assuming the result structure matches our SearchResult[] shape
+      setSearchResults(data.tracks.items);
+    } catch (err) {
+      console.error(err);
+      setError("Failed to fetch default suggestions.");
+    }
+  };
+  
+
+  const handleSearch = async (query: string) => {
+    // If query is empty or too short, fetch default suggestions
+    if (!query || query.length < 2) {
+      await fetchDefaultSuggestions();
+      return;
+    }
 
     setIsLoading(true);
     setError(null);
 
     try {
       const res = await fetch(
-        `https://api.spotify.com/v1/search?q=${encodeURIComponent(searchQuery)}&type=track`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
+        `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track`,
+        { headers: { Authorization: `Bearer ${token}` } }
       );
-
-      if (!res.ok) throw new Error(`Failed to fetch search results: ${res.statusText}`);
-
+      if (!res.ok) throw new Error(`Search error: ${res.statusText}`);
       const data = await res.json();
       setSearchResults(data.tracks.items);
     } catch (err) {
       console.error("Error searching for songs:", err);
       setError("Failed to fetch search results. Please try again.");
+      setSearchResults([]);
     } finally {
       setIsLoading(false);
     }
   };
 
+  useEffect(() => {
+    // On mount, fetch default suggestions
+    handleSearch("");
+  }, []);
+
   const handleAddVoteAndSong = async (track: SearchResult) => {
     if (!userId) {
-      console.error("No user ID available for adding the vote.");
       alert("You must be signed in to suggest a song.");
       return;
     }
-
     try {
-      // 1. Add a vote in Supabase
       const { error: voteError } = await supabase.from("votes").insert({
         spotifytrackid: track.id,
         spotifyuserid: userId,
         votedat: new Date().toISOString(),
       });
+      if (voteError) throw new Error(`Vote error: ${voteError.message}`);
 
-      if (voteError) {
-        throw new Error(`Failed to add vote: ${voteError.message}`);
-      }
-
-      // 2. Add the song to the Spotify playlist
       const spotifyRes = await fetch(
         `https://api.spotify.com/v1/playlists/${playlistId}/tracks`,
         {
@@ -82,20 +99,17 @@ export default function SongSuggestions({ token, userId, playlistId }: SongSugge
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            uris: [`spotify:track:${track.id}`],
-          }),
+          body: JSON.stringify({ uris: [`spotify:track:${track.id}`] }),
         }
       );
-
       if (!spotifyRes.ok) {
         const spotifyError = await spotifyRes.json();
-        throw new Error(`Failed to add song to Spotify playlist: ${spotifyError.error.message}`);
+        throw new Error(spotifyError.error.message);
       }
 
       alert(`Successfully added "${track.name}" to the playlist and voted!`);
     } catch (err) {
-      console.error("Error adding vote or song to Spotify playlist:", err);
+      console.error("Error adding vote or song:", err);
       alert("Failed to add the song or vote. Please try again.");
     }
   };
@@ -105,21 +119,18 @@ export default function SongSuggestions({ token, userId, playlistId }: SongSugge
       <h2 className="text-xl font-bold text-white mb-4">Suggest a Song</h2>
 
       {/* Search Bar */}
-      <div className="flex items-center gap-4 mb-6">
+      <div className="mb-6">
         <input
           type="text"
           placeholder="Search for a song..."
-          className="flex-1 p-2 rounded-md bg-gray-700 text-white"
+          className="w-full p-3 pl-10 rounded-md bg-gray-900 text-white placeholder-gray-500 focus:outline-none"
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          onChange={(e) => {
+            const query = e.target.value;
+            setSearchQuery(query);
+            handleSearch(query);
+          }}
         />
-        <button
-          className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
-          onClick={handleSearch}
-          disabled={isLoading}
-        >
-          {isLoading ? "Searching..." : "Search"}
-        </button>
       </div>
 
       {/* Error Message */}
@@ -156,7 +167,7 @@ export default function SongSuggestions({ token, userId, playlistId }: SongSugge
 
       {/* No Results Message */}
       {!isLoading && searchResults.length === 0 && searchQuery && (
-        <p className="text-gray-400">No results found for "{searchQuery}".</p>
+        <p className="text-gray-400 mt-4">No results found for "{searchQuery}".</p>
       )}
     </div>
   );

@@ -427,7 +427,7 @@ export default function PlaylistsClient() {
 
   {/* Mobile Tabs */}
   <div className="fixed bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-700 flex justify-around py-3 z-50">
-    {["Playlist 1", "Playlist 2", "Suggestions"].map((label, index) => (
+    {["Setlist", "Suggestions", "Add New Song"].map((label, index) => (
       <button
         key={index}
         onClick={() => setActiveTab(index)}
