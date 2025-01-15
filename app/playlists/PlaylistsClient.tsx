@@ -107,6 +107,35 @@ export default function PlaylistsClient() {
     fetchData();
   }, [searchParams, router]);
 
+  const refreshPlaylists = async () => {
+    if (!token) return;
+    const playlistIds = ["4wOKl0V3Hy5QnNUmYxM6Tk", "2QgT7vxgcZNLpiIPhuJDo0"];
+    try {
+      const fetchedPlaylists = await Promise.all(
+        playlistIds.map(async (id) => {
+          const res = await fetch(`https://api.spotify.com/v1/playlists/${id}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (!res.ok) throw new Error(`Failed to fetch playlist ${id}`);
+          return res.json();
+        })
+      );
+      setPlaylists(fetchedPlaylists);
+  
+ 
+      if (window.innerWidth < 768) {
+        setActiveTab(1); 
+   
+        setTimeout(() => {
+          window.scrollTo(0, document.body.scrollHeight);
+        }, 100);
+      }
+    } catch (err) {
+      console.error("Error refreshing playlists:", err);
+    }
+  };
+  
+
   const handleVote = async (trackId: string) => {
     if (!user) {
       console.error("No user available for voting.");
@@ -309,7 +338,7 @@ export default function PlaylistsClient() {
               </ul>
               {index === 1 && token && user?.id && (
                 <div className="mt-6">
-                  <SongSuggestions token={token} userId={user.id} playlistId={playlist.id} />
+                  <SongSuggestions token={token} userId={user.id} playlistId={playlist.id} onSongAdded={refreshPlaylists}  />
                 </div>
               )}
             </div>
@@ -425,11 +454,7 @@ export default function PlaylistsClient() {
             >
               <h2 className="text-lg font-bold mb-4">Song Suggestions</h2>
               {token && user?.id && (
-                <SongSuggestions
-                  token={token}
-                  userId={user.id}
-                  playlistId={SUGGESTIONS_PLAYLIST_ID}
-                />
+              <SongSuggestions token={token} userId={user.id} playlistId={SUGGESTIONS_PLAYLIST_ID} onSongAdded={refreshPlaylists}/>
               )}
             </div>
           </div>

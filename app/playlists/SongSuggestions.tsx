@@ -20,9 +20,10 @@ type SongSuggestionsProps = {
   token: string;
   userId: string;
   playlistId: string;
+  onSongAdded?: () => void;
 };
 
-export default function SongSuggestions({ token, userId, playlistId }: SongSuggestionsProps) {
+export default function SongSuggestions({ token, userId, playlistId, onSongAdded }: SongSuggestionsProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -32,7 +33,7 @@ export default function SongSuggestions({ token, userId, playlistId }: SongSugge
   const fetchDefaultSuggestions = async () => {
     try {
       const res = await fetch(
-        `https://api.spotify.com/v1/search?q=livdog&type=track&limit=20`,
+        `https://api.spotify.com/v1/search?q=test&type=track&limit=20`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (!res.ok) throw new Error(`Error fetching tracks: ${res.statusText}`);
@@ -106,8 +107,8 @@ export default function SongSuggestions({ token, userId, playlistId }: SongSugge
         const spotifyError = await spotifyRes.json();
         throw new Error(spotifyError.error.message);
       }
-
-      alert(`Successfully added "${track.name}" to the playlist and voted!`);
+      if (onSongAdded) onSongAdded();  
+     
     } catch (err) {
       console.error("Error adding vote or song:", err);
       alert("Failed to add the song or vote. Please try again.");
@@ -159,7 +160,7 @@ export default function SongSuggestions({ token, userId, playlistId }: SongSugge
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
               onClick={() => handleAddVoteAndSong(result)}
             >
-              Vote & Add
+              Add
             </button>
           </li>
         ))}
