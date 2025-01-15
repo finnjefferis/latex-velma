@@ -10,7 +10,6 @@ import Votes from "./Votes";
 const MAIN_PLAYLIST_ID = "4wOKl0V3Hy5QnNUmYxM6Tk";
 const SUGGESTIONS_PLAYLIST_ID = "2QgT7vxgcZNLpiIPhuJDo0";
 
-
 // Initialize Supabase client
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -42,7 +41,7 @@ type SpotifyUser = {
 type Vote = {
   spotifytrackid: string;
   spotifyuserid: string;
-  votedat: string; 
+  votedat: string;
 };
 
 export default function PlaylistsClient() {
@@ -53,6 +52,10 @@ export default function PlaylistsClient() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<number>(0); // Active tab for mobile view
+
+  // State for swipe detection
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const [touchEndX, setTouchEndX] = useState<number | null>(null);
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -109,18 +112,24 @@ export default function PlaylistsClient() {
       console.error("No user available for voting.");
       return;
     }
-    const existingVote = votes.find((vote) => vote.spotifytrackid === trackId);
+    const existingVote = votes.find(
+      (vote) =>
+        vote.spotifytrackid === trackId && vote.spotifyuserid === user.id
+    );
     try {
       if (existingVote) {
-        // Remove vote
         const { error } = await supabase
           .from("votes")
           .delete()
           .match({ spotifyuserid: user.id, spotifytrackid: trackId });
         if (error) throw error;
-        setVotes((prev) => prev.filter((v) => v.spotifytrackid !== trackId));
+        setVotes((prev) =>
+          prev.filter(
+            (v) =>
+              !(v.spotifytrackid === trackId && v.spotifyuserid === user.id)
+          )
+        );
       } else {
-        // Add vote
         const votedAt = new Date().toISOString();
         const { error } = await supabase.from("votes").insert([
           {
@@ -130,7 +139,7 @@ export default function PlaylistsClient() {
           },
         ]);
         if (error) throw error;
-
+  
         setVotes((prev) => [
           ...prev,
           {
@@ -140,46 +149,83 @@ export default function PlaylistsClient() {
           },
         ]);
       }
-
-      // Then, inside handleVote (AFTER you've updated the local "votes" state) add:
-const newVoteCount = votes.filter((v) => v.spotifytrackid === trackId).length;
-// If we just inserted a vote, add +1:
-const finalVoteCount = existingVote ? newVoteCount : newVoteCount + 1;
-
-if (finalVoteCount === 5) {
-  try {
-    // 1. Remove track from SUGGESTIONS_PLAYLIST_ID
-    await fetch(`https://api.spotify.com/v1/playlists/${SUGGESTIONS_PLAYLIST_ID}/tracks`, {
-      method: "DELETE",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`, // or whatever your access token variable is
-      },
-      body: JSON.stringify({
-        tracks: [{ uri: `spotify:track:${trackId}` }],
-      }),
-    });
-
-    // 2. Add track to MAIN_PLAYLIST_ID
-    await fetch(`https://api.spotify.com/v1/playlists/${MAIN_PLAYLIST_ID}/tracks`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        uris: [`spotify:track:${trackId}`],
-      }),
-    });
-
-    console.log(`Track ${trackId} moved from suggestions to main playlist!`);
-  } catch (err) {
-    console.error("Error moving track:", err);
-  }
-}
+  
+      const newVoteCount = votes.filter(
+        (v) => v.spotifytrackid === trackId
+      ).length;
+      const finalVoteCount = existingVote ? newVoteCount : newVoteCount + 1;
+  
+      if (finalVoteCount === 5) {
+        try {
+          await fetch(
+            `https://api.spotify.com/v1/playlists/${SUGGESTIONS_PLAYLIST_ID}/tracks`,
+            {
+              method: "DELETE",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                tracks: [{ uri: `spotify:track:${trackId}` }],
+              }),
+            }
+          );
+  
+          await fetch(
+            `https://api.spotify.com/v1/playlists/${MAIN_PLAYLIST_ID}/tracks`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                uris: [`spotify:track:${trackId}`],
+              }),
+            }
+          );
+  
+          console.log(
+            `Track ${trackId} moved from suggestions to main playlist!`
+          );
+        } catch (err) {
+          console.error("Error moving track:", err);
+        }
+      }
     } catch (err) {
       console.error("Error managing vote:", err);
     }
+  };
+
+  function getVotePercentage(trackId: string) {
+    const voteCount = votes.filter((v) => v.spotifytrackid === trackId).length;
+    const fraction = Math.min(voteCount, 5);
+    return (fraction / 5) * 100;
+  }
+
+  // Touch event handlers for swipe detection
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStartX(e.targetTouches[0].clientX);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    setTouchEndX(e.targetTouches[0].clientX);
+  };
+
+  const handleTouchEnd = () => {
+    if (touchStartX === null || touchEndX === null) return;
+
+    const swipeDistance = touchStartX - touchEndX;
+    const swipeThreshold = 50;
+
+    if (swipeDistance > swipeThreshold) {
+      setActiveTab((prev) => Math.min(prev + 1, 2));
+    } else if (swipeDistance < -swipeThreshold) {
+      setActiveTab((prev) => Math.max(prev - 1, 0));
+    }
+
+    setTouchStartX(null);
+    setTouchEndX(null);
   };
 
   if (isLoading) {
@@ -192,13 +238,6 @@ if (finalVoteCount === 5) {
         {error}
       </div>
     );
-  }
-
-  // Helper to compute how "green" the background is (max of 5 votes displayed).
-  function getVotePercentage(trackId: string) {
-    const voteCount = votes.filter((v) => v.spotifytrackid === trackId).length;
-    const fraction = Math.min(voteCount, 5);   // cap at 5
-    return (fraction / 5) * 100;              // each vote is 20%
   }
 
   return (
@@ -227,18 +266,13 @@ if (finalVoteCount === 5) {
                     <div
                       key={item.track.id}
                       className="mb-4 flex items-start gap-4 relative cursor-pointer"
-                      // Only allow voting on the second playlist (index === 1)
                       onClick={() => index === 1 && handleVote(item.track.id)}
                     >
-                      {/* Green background overlay */}
                       <div
-  className="absolute top-0 left-0 h-full bg-green-500 opacity-25 
-             transition-[width] duration-300 ease-in-out"
-  style={{ width: `${bgWidth}%` }}
-></div>
-
-
-                      {/* Track Album Cover */}
+                        className="absolute top-0 left-0 h-full bg-green-500 opacity-25 
+                                   transition-[width] duration-300 ease-in-out"
+                        style={{ width: `${bgWidth}%` }}
+                      ></div>
                       {item.track.album.images[0]?.url ? (
                         <Image
                           src={item.track.album.images[0].url || ""}
@@ -252,8 +286,6 @@ if (finalVoteCount === 5) {
                           N/A
                         </div>
                       )}
-
-                      {/* Track Info */}
                       <div className="flex-1 relative z-10">
                         <p
                           className={`font-medium ${
@@ -268,8 +300,6 @@ if (finalVoteCount === 5) {
                           {item.track.artists.map((artist) => artist.name).join(", ")}
                         </p>
                       </div>
-
-                      {/* Vote Count (or any other UI) */}
                       <div className="relative z-10">
                         <Votes votes={votes} trackId={item.track.id} />
                       </div>
@@ -277,7 +307,6 @@ if (finalVoteCount === 5) {
                   );
                 })}
               </ul>
-
               {index === 1 && token && user?.id && (
                 <div className="mt-6">
                   <SongSuggestions token={token} userId={user.id} playlistId={playlist.id} />
@@ -287,92 +316,135 @@ if (finalVoteCount === 5) {
           ))}
         </div>
 
-        {/* Mobile View */}
-        <div className="md:hidden">
-          {playlists.map((playlist, index) => (
+      {/* Mobile View */}
+<div
+  className="md:hidden relative pb-16 overflow-hidden"
+  onTouchStart={handleTouchStart}
+  onTouchMove={handleTouchMove}
+  onTouchEnd={handleTouchEnd}
+>
+  {/* Flex container holds all tab contents side-by-side */}
+  <div
+    className="flex transition-transform duration-300"
+    style={{ transform: `translateX(-${activeTab * 100}%)` }}
+  >
+    {/* Tab 0 Content */}
+    <div className="w-full flex-shrink-0 px-4 py-6">
+      <h2 className="text-lg font-bold mb-4">{playlists[0]?.name}</h2>
+      {playlists[0]?.tracks.items.map((item) => {
+        const bgWidth = getVotePercentage(item.track.id);
+        return (
+          <div
+            key={item.track.id}
+            className="mb-4 flex items-start gap-4 relative cursor-pointer"
+            onClick={() => handleVote(item.track.id)}
+          >
             <div
-              key={playlist.id}
-              className={`${activeTab === index ? "block" : "hidden"} px-4 py-6`}
-            >
-              <h2 className="text-lg font-bold mb-4">{playlist.name}</h2>
-              {playlist.tracks.items.map((item) => {
-                const bgWidth = getVotePercentage(item.track.id);
-
-                return (
-                  <div
-                    key={item.track.id}
-                    className="mb-4 flex items-start gap-4 relative cursor-pointer"
-                    onClick={() => index === 1 && handleVote(item.track.id)}
-                  >
-                    {/* Green background overlay */}
-                    <div
-  className="absolute top-0 left-0 h-full bg-green-500 opacity-25 
-             transition-[width] duration-300 ease-in-out"
-  style={{ width: `${bgWidth}%` }}
-></div>
-
-
-                    {/* Track Album Cover */}
-                    {item.track.album.images[0]?.url ? (
-                      <Image
-                        src={item.track.album.images[0].url || ""}
-                        alt={`${item.track.name} cover`}
-                        width={48}
-                        height={48}
-                        className="rounded-md"
-                      />
-                    ) : (
-                      <div className="w-12 h-12 bg-gray-700 rounded-md flex items-center justify-center text-sm text-white">
-                        N/A
-                      </div>
-                    )}
-
-                    {/* Track Info */}
-                    <div className="flex-1 relative z-10">
-                      <p
-                        className={`font-medium ${
-                          votes.some((v) => v.spotifytrackid === item.track.id) && index === 1
-                            ? "text-green-400"
-                            : ""
-                        }`}
-                      >
-                        {item.track.name}
-                      </p>
-                      <p className="text-gray-400 text-sm">
-                        {item.track.artists.map((artist) => artist.name).join(", ")}
-                      </p>
-                    </div>
-
-                    {/* Vote Count (or any other UI) */}
-                    <div className="relative z-10">
-                      <Votes votes={votes} trackId={item.track.id} />
-                    </div>
-                  </div>
-                );
-              })}
-              {index === 1 && token && user?.id && (
-                <div className="mt-6">
-                  <SongSuggestions token={token} userId={user.id} playlistId={playlist.id} />
-                </div>
-              )}
+              className="absolute top-0 left-0 h-full bg-green-500 opacity-25 transition-[width] duration-300 ease-in-out"
+              style={{ width: `${bgWidth}%` }}
+            ></div>
+            {item.track.album.images[0]?.url ? (
+              <Image
+                src={item.track.album.images[0].url}
+                alt={`${item.track.name} cover`}
+                width={48}
+                height={48}
+                className="rounded-md"
+              />
+            ) : (
+              <div className="w-12 h-12 bg-gray-700 rounded-md flex items-center justify-center text-sm text-white">
+                N/A
+              </div>
+            )}
+            <div className="flex-1 relative z-10">
+              <p className="font-medium">{item.track.name}</p>
+              <p className="text-gray-400 text-sm">
+                {item.track.artists.map((artist) => artist.name).join(", ")}
+              </p>
             </div>
-          ))}
-
-          {/* Mobile Tabs */}
-          <div className="fixed bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-700 flex justify-around py-2">
-            {playlists.map((playlist, index) => (
-              <button
-                key={playlist.id}
-                onClick={() => setActiveTab(index)}
-                className={`flex-1 text-center py-2 text-sm ${
-                  activeTab === index ? "text-white" : "text-gray-400"
-                }`}
-              >
-                {playlist.name}
-              </button>
-            ))}
+            <div className="relative z-10">
+              <Votes votes={votes} trackId={item.track.id} />
+            </div>
           </div>
-        </div>
+        );
+      })}
+    </div>
+
+    {/* Tab 1 Content */}
+    <div className="w-full flex-shrink-0 px-4 py-6">
+      <h2 className="text-lg font-bold mb-4">{playlists[1]?.name}</h2>
+      {playlists[1]?.tracks.items.map((item) => {
+        const bgWidth = getVotePercentage(item.track.id);
+        return (
+          <div
+            key={item.track.id}
+            className="mb-4 flex items-start gap-4 relative cursor-pointer"
+            onClick={() => handleVote(item.track.id)}
+          >
+            <div
+              className="absolute top-0 left-0 h-full bg-green-500 opacity-25 transition-[width] duration-300 ease-in-out"
+              style={{ width: `${bgWidth}%` }}
+            ></div>
+            {item.track.album.images[0]?.url ? (
+              <Image
+                src={item.track.album.images[0].url}
+                alt={`${item.track.name} cover`}
+                width={48}
+                height={48}
+                className="rounded-md"
+              />
+            ) : (
+              <div className="w-12 h-12 bg-gray-700 rounded-md flex items-center justify-center text-sm text-white">
+                N/A
+              </div>
+            )}
+            <div className="flex-1 relative z-10">
+              <p className="font-medium">{item.track.name}</p>
+              <p className="text-gray-400 text-sm">
+                {item.track.artists.map((artist) => artist.name).join(", ")}
+              </p>
+            </div>
+            <div className="relative z-10">
+              <Votes votes={votes} trackId={item.track.id} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+
+    {/* Tab 2 Content */}
+    <div className="w-full flex-shrink-0 px-4 py-6">
+      <h2 className="text-lg font-bold mb-4">Song Suggestions</h2>
+      {token && user?.id && (
+        <SongSuggestions
+          token={token}
+          userId={user.id}
+          playlistId={SUGGESTIONS_PLAYLIST_ID}
+        />
+      )}
+    </div>
+  </div>
+
+  {/* Mobile Tabs */}
+  <div className="fixed bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-700 flex justify-around py-3 z-50">
+    {["Playlist 1", "Playlist 2", "Suggestions"].map((label, index) => (
+      <button
+        key={index}
+        onClick={() => setActiveTab(index)}
+        className={`flex-1 text-center text-sm font-semibold 
+                    ${
+                      activeTab === index
+                        ? "text-white border-b-2 border-green-500"
+                        : "text-gray-400"
+                    } 
+                    focus:outline-none`}
+      >
+        {label}
+      </button>
+    ))}
+  </div>
+</div>
+
       </div>
     </div>
   );
