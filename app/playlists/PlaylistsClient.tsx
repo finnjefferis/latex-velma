@@ -53,6 +53,10 @@ export default function PlaylistsClient() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<number>(0); // Active tab for mobile view
 
+  // Modal state
+  const [isModalOpen, setModalOpen] = useState(false);
+  const [modalContent, setModalContent] = useState<React.ReactNode>(null);
+
   // State for swipe detection
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const [touchEndX, setTouchEndX] = useState<number | null>(null);
@@ -242,6 +246,27 @@ export default function PlaylistsClient() {
 
   return (
     <div className="min-h-screen w-screen bg-gray-900 text-white">
+      {/* Modal Container */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          {/* Backdrop */}
+          <div 
+            className="fixed inset-0 bg-black opacity-50" 
+            onClick={() => setModalOpen(false)}
+          ></div>
+          {/* Modal Content */}
+          <div className="relative z-60 bg-white rounded-md p-6 mx-4 max-w-md w-full">
+            {modalContent}
+            <button 
+              className="mt-4 px-4 py-2 bg-blue-600 text-white rounded"
+              onClick={() => setModalOpen(false)}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="container mx-auto py-8">
         {/* Desktop View */}
         <div className="hidden md:grid grid-cols-2 gap-4">
@@ -316,135 +341,134 @@ export default function PlaylistsClient() {
           ))}
         </div>
 
-      {/* Mobile View */}
-<div
-  className="md:hidden relative pb-16 overflow-hidden"
-  onTouchStart={handleTouchStart}
-  onTouchMove={handleTouchMove}
-  onTouchEnd={handleTouchEnd}
->
-  {/* Flex container holds all tab contents side-by-side */}
-  <div
-    className="flex transition-transform duration-300"
-    style={{ transform: `translateX(-${activeTab * 100}%)` }}
-  >
-    {/* Tab 0 Content */}
-    <div className="w-full flex-shrink-0 px-4 py-6">
-      <h2 className="text-lg font-bold mb-4">{playlists[0]?.name}</h2>
-      {playlists[0]?.tracks.items.map((item) => {
-        const bgWidth = getVotePercentage(item.track.id);
-        return (
+        {/* Mobile View */}
+        <div
+          className="md:hidden relative pb-16 overflow-hidden"
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
+          {/* Flex container holds all tab contents side-by-side */}
           <div
-            key={item.track.id}
-            className="mb-4 flex items-start gap-4 relative cursor-pointer"
-            onClick={() => handleVote(item.track.id)}
+            className="flex transition-transform duration-300"
+            style={{ transform: `translateX(-${activeTab * 100}%)` }}
           >
-            <div
-              className="absolute top-0 left-0 h-full bg-green-500 opacity-25 transition-[width] duration-300 ease-in-out"
-              style={{ width: `${bgWidth}%` }}
-            ></div>
-            {item.track.album.images[0]?.url ? (
-              <Image
-                src={item.track.album.images[0].url}
-                alt={`${item.track.name} cover`}
-                width={48}
-                height={48}
-                className="rounded-md"
-              />
-            ) : (
-              <div className="w-12 h-12 bg-gray-700 rounded-md flex items-center justify-center text-sm text-white">
-                N/A
-              </div>
-            )}
-            <div className="flex-1 relative z-10">
-              <p className="font-medium">{item.track.name}</p>
-              <p className="text-gray-400 text-sm">
-                {item.track.artists.map((artist) => artist.name).join(", ")}
-              </p>
+            {/* Tab 0 Content */}
+            <div className="w-full flex-shrink-0 px-4 py-6">
+              <h2 className="text-lg font-bold mb-4">{playlists[0]?.name}</h2>
+              {playlists[0]?.tracks.items.map((item) => {
+                const bgWidth = getVotePercentage(item.track.id);
+                return (
+                  <div
+                    key={item.track.id}
+                    className="mb-4 flex items-start gap-4 relative cursor-pointer"
+                    onClick={() => handleVote(item.track.id)}
+                  >
+                    <div
+                      className="absolute top-0 left-0 h-full bg-green-500 opacity-25 transition-[width] duration-300 ease-in-out"
+                      style={{ width: `${bgWidth}%` }}
+                    ></div>
+                    {item.track.album.images[0]?.url ? (
+                      <Image
+                        src={item.track.album.images[0].url}
+                        alt={`${item.track.name} cover`}
+                        width={48}
+                        height={48}
+                        className="rounded-md"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 bg-gray-700 rounded-md flex items-center justify-center text-sm text-white">
+                        N/A
+                      </div>
+                    )}
+                    <div className="flex-1 relative z-10">
+                      <p className="font-medium">{item.track.name}</p>
+                      <p className="text-gray-400 text-sm">
+                        {item.track.artists.map((artist) => artist.name).join(", ")}
+                      </p>
+                    </div>
+                    <div className="relative z-10">
+                      <Votes votes={votes} trackId={item.track.id} />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-            <div className="relative z-10">
-              <Votes votes={votes} trackId={item.track.id} />
+
+            {/* Tab 1 Content */}
+            <div className="w-full flex-shrink-0 px-4 py-6">
+              <h2 className="text-lg font-bold mb-4">{playlists[1]?.name}</h2>
+              {playlists[1]?.tracks.items.map((item) => {
+                const bgWidth = getVotePercentage(item.track.id);
+                return (
+                  <div
+                    key={item.track.id}
+                    className="mb-4 flex items-start gap-4 relative cursor-pointer"
+                    onClick={() => handleVote(item.track.id)}
+                  >
+                    <div
+                      className="absolute top-0 left-0 h-full bg-green-500 opacity-25 transition-[width] duration-300 ease-in-out"
+                      style={{ width: `${bgWidth}%` }}
+                    ></div>
+                    {item.track.album.images[0]?.url ? (
+                      <Image
+                        src={item.track.album.images[0].url}
+                        alt={`${item.track.name} cover`}
+                        width={48}
+                        height={48}
+                        className="rounded-md"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 bg-gray-700 rounded-md flex items-center justify-center text-sm text-white">
+                        N/A
+                      </div>
+                    )}
+                    <div className="flex-1 relative z-10">
+                      <p className="font-medium">{item.track.name}</p>
+                      <p className="text-gray-400 text-sm">
+                        {item.track.artists.map((artist) => artist.name).join(", ")}
+                      </p>
+                    </div>
+                    <div className="relative z-10">
+                      <Votes votes={votes} trackId={item.track.id} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Tab 2 Content */}
+            <div className="w-full flex-shrink-0 px-4 py-6">
+              <h2 className="text-lg font-bold mb-4">Song Suggestions</h2>
+              {token && user?.id && (
+                <SongSuggestions
+                  token={token}
+                  userId={user.id}
+                  playlistId={SUGGESTIONS_PLAYLIST_ID}
+                />
+              )}
             </div>
           </div>
-        );
-      })}
-    </div>
 
-    {/* Tab 1 Content */}
-    <div className="w-full flex-shrink-0 px-4 py-6">
-      <h2 className="text-lg font-bold mb-4">{playlists[1]?.name}</h2>
-      {playlists[1]?.tracks.items.map((item) => {
-        const bgWidth = getVotePercentage(item.track.id);
-        return (
-          <div
-            key={item.track.id}
-            className="mb-4 flex items-start gap-4 relative cursor-pointer"
-            onClick={() => handleVote(item.track.id)}
-          >
-            <div
-              className="absolute top-0 left-0 h-full bg-green-500 opacity-25 transition-[width] duration-300 ease-in-out"
-              style={{ width: `${bgWidth}%` }}
-            ></div>
-            {item.track.album.images[0]?.url ? (
-              <Image
-                src={item.track.album.images[0].url}
-                alt={`${item.track.name} cover`}
-                width={48}
-                height={48}
-                className="rounded-md"
-              />
-            ) : (
-              <div className="w-12 h-12 bg-gray-700 rounded-md flex items-center justify-center text-sm text-white">
-                N/A
-              </div>
-            )}
-            <div className="flex-1 relative z-10">
-              <p className="font-medium">{item.track.name}</p>
-              <p className="text-gray-400 text-sm">
-                {item.track.artists.map((artist) => artist.name).join(", ")}
-              </p>
-            </div>
-            <div className="relative z-10">
-              <Votes votes={votes} trackId={item.track.id} />
-            </div>
-          </div>
-        );
-      })}
-    </div>
-
-    {/* Tab 2 Content */}
-    <div className="w-full flex-shrink-0 px-4 py-6">
-      <h2 className="text-lg font-bold mb-4">Song Suggestions</h2>
-      {token && user?.id && (
-        <SongSuggestions
-          token={token}
-          userId={user.id}
-          playlistId={SUGGESTIONS_PLAYLIST_ID}
-        />
-      )}
-    </div>
-  </div>
-
-  {/* Mobile Tabs */}
-  <div className="fixed bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-700 flex justify-around py-3 z-50">
-    {["Setlist", "Suggestions", "Add New Song"].map((label, index) => (
-      <button
-        key={index}
-        onClick={() => setActiveTab(index)}
-        className={`flex-1 text-center text-sm font-semibold 
+          {/* Mobile Tabs */}
+          <div className="fixed bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-700 flex justify-around py-3 z-50">
+            {["Setlist", "Suggestions", "Add New Song"].map((label, index) => (
+              <button
+                key={index}
+                onClick={() => setActiveTab(index)}
+                className={`flex-1 text-center text-sm font-semibold 
                     ${
                       activeTab === index
                         ? "text-white border-b-2 border-green-500"
                         : "text-gray-400"
                     } 
                     focus:outline-none`}
-      >
-        {label}
-      </button>
-    ))}
-  </div>
-</div>
-
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
